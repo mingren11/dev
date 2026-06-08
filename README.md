@@ -90,8 +90,26 @@ chmod +x dockerize.sh
 - 以 root 身份运行宿主机时，容器内同样以 root 运行，跳过用户映射
 - `--gpus all` 需要宿主机安装 NVIDIA Container Toolkit，无 GPU 环境请自行移除该参数
 
+## 可能出现的问题
+
+实际过程当中可能会出现CDI 配置问题，安装/重装 NVIDIA Container Toolkit
+```
+# Ubuntu/Debian
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+sudo apt update && sudo apt install -y nvidia-container-toolkit
+
+# 配置 Docker runtime
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+```
+
 ---
 
 ## 作者
 
-renming · 1689119010@qq.com
+renming ·shuaiqiduoyi@gmail.com
