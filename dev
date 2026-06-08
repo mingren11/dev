@@ -1,0 +1,164 @@
+#!/bin/bash
+
+# by renming ,email: 1689119010@qq.com
+
+# Get current directory name as container name (convert to lowercase)
+container_name=$(basename "$PWD" | tr '[:upper:]' '[:lower:]')
+dockerfile_path="$PWD/artifacts/docker/dev.dockerfile"
+md5_file="/tmp/.${container_name}_dockerfile_md5"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+host_user="${USER:-$(whoami)}"
+host_uid="$(id -u)"
+host_gid="$(id -g)"
+container_home="/home/${host_user}"
+
+# Function to check if dockerfile has changed
+check_dockerfile_changed() {
+    # If MD5 file doesn't exist, create it
+    if [ ! -f "$md5_file" ]; then
+        md5sum "$dockerfile_path" > "$md5_file"
+        return 0
+    fi
+    
+    # Compare current MD5 with stored MD5
+    local stored_md5=$(cat "$md5_file")
+    local current_md5=$(md5sum "$dockerfile_path")
+    
+    if [ "$stored_md5" != "$current_md5" ]; then
+        md5sum "$dockerfile_path" > "$md5_file"
+        return 0
+    fi
+    return 1
+}
+
+ensure_container_user() {
+    if [ "$host_uid" -eq 0 ]; then
+        return 0
+    fi
+
+    docker exec "$container_name" bash -c "
+        if ! getent passwd '${host_user}' >/dev/null; then
+            groupadd -g ${host_gid} '${host_user}' 2>/dev/null || true
+            mkdir -p '${container_home}'
+            useradd -u ${host_uid} -g ${host_gid} -d '${container_home}' -M -s /bin/bash '${host_user}'
+            chown -R ${host_uid}:${host_gid} '${container_home}'
+            usermod -aG sudo '${host_user}' 2>/dev/null || true
+        fi
+    "
+}
+
+enter_container() {
+    ensure_container_user
+    if [ "$host_uid" -eq 0 ]; then
+        docker exec -it -w "/${container_name}" "$container_name" /bin/bash
+    else
+        docker exec -it \
+            -u "${host_user}" \
+            -e "HOME=${container_home}" \
+            -w "/${container_name}" \
+            "$container_name" /bin/bash
+    fi
+}
+
+setup_container() {
+    docker exec "$container_name" bash -c "grep -q 'bash_local' ${container_home}/.bashrc 2>/dev/null || echo '
+if [[ -f ~/.bash_local ]]; then
+  . ~/.bash_local
+fi
+' >> ${container_home}/.bashrc"
+
+    BASH_LOCAL=${BASH_LOCAL:-$DIR/docker_bashrc.sh}
+    if [[ -f $BASH_LOCAL ]]; then
+        echo "Adding bash config [$BASH_LOCAL] inside the container ..."
+        docker cp "$BASH_LOCAL" "$container_name:${container_home}/.bash_local"
+        docker exec "$container_name" chown "${host_uid}:${host_gid}" "${container_home}/.bash_local"
+        echo "Done"
+    fi
+
+    if [[ -f $HOME/.gitconfig ]]; then
+        docker cp "$HOME/.gitconfig" "$container_name:${container_home}/.gitconfig"
+        docker exec "$container_name" chown "${host_uid}:${host_gid}" "${container_home}/.gitconfig"
+        if [[ -f $HOME/.git-credentials ]]; then
+            docker cp "$HOME/.git-credentials" "$container_name:${container_home}/.git-credentials"
+            docker exec "$container_name" chown "${host_uid}:${host_gid}" "${container_home}/.git-credentials"
+        fi
+    fi
+
+    if [[ -f $DIR/go.mod && -d $HOME/.config/go ]]; then
+        docker exec "$container_name" bash -c "mkdir -p ${container_home}/.config"
+        docker cp "$HOME/.config/go" "$container_name:${container_home}/.config/go"
+        docker exec "$container_name" chown -R "${host_uid}:${host_gid}" "${container_home}/.config"
+    fi
+
+    if $ROOTLESS && $BAZEL_WORKSPACE && [[ "$host_uid" -ne 0 ]]; then
+        docker exec "$container_name" bash -c \
+            "echo 'startup --output_user_root ${container_home}/.cache/bazel/_bazel_${host_user}' >> \
+             ${container_home}/.bazelrc"
+        docker exec "$container_name" chown "${host_uid}:${host_gid}" "${container_home}/.bazelrc"
+    fi
+
+    if [[ -n $SSH_PORT ]]; then
+        echo "Adding ssh server inside the container ..."
+        "$DIR/docker_addssh.sh"
+        echo "Done"
+    fi
+}
+
+# Check if dockerfile exists
+if [ ! -f "$dockerfile_path" ]; then
+    echo "Error: Dockerfile not found at path $dockerfile_path"
+    exit 1
+fi
+
+# Check if container needs to be recreated
+needs_rebuild=0
+if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+    if check_dockerfile_changed; then
+        echo "Detected Dockerfile changes, will recreate container"
+        docker rm -f $container_name
+        needs_rebuild=1
+    else
+        # Check if container is running
+        if ! docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
+            echo "Container is stopped, starting it..."
+            docker start $container_name
+        fi
+        echo "Entering existing container as ${host_user}: $container_name"
+        enter_container
+        exit 0
+    fi
+fi
+
+# Build and run new container
+if [ $needs_rebuild -eq 1 ] || ! docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+    echo "Creating new container: $container_name"
+    docker build -t $container_name -f $dockerfile_path .
+    docker run -d --name $container_name \
+        --privileged \
+        --hostname in_docker \
+        --add-host in_docker:127.0.0.1 \
+        --add-host $(hostname):127.0.0.1 \
+        --shm-size 2G \
+        --gpus all \
+        -e NVIDIA_VISIBLE_DEVICES=all \
+        -e NVIDIA_DRIVER_CAPABILITIES=all \
+        -e DISPLAY \
+        -v /etc/localtime:/etc/localtime:ro \
+        -v /lib/modules:/lib/modules \
+        -v /dev/bus/usb:/dev/bus/usb \
+        -v /media:/media \
+        -v /mnt:/mnt \
+        -v /tmp/.X11-unix:/tmp/.X11-unix \
+        -v /usr/src:/usr/src \
+        -v $HOME/.cache:${container_home}/.cache \
+        -v $PWD:/$container_name \
+        -w /$container_name \
+        $container_name \
+        sleep infinity
+
+    setup_container
+    echo "Entering new container as ${host_user}: $container_name"
+    enter_container
+fi
+
