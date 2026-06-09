@@ -1,4 +1,4 @@
-# dockerize.sh
+# dev
 
 一个轻量级的 Docker 开发容器管理脚本，支持自动构建、增量重建（Dockerfile 变更检测）和用户映射，专为本地开发工作流设计。
 
@@ -21,8 +21,7 @@
 ├── artifacts/
 │   └── docker/
 │       └── dev.dockerfile      # 必须存在
-├── dockerize.sh                 # 本脚本
-└── docker_bashrc.sh             # 可选：注入容器的 bash 配置
+└── dev                 # 本脚本
 ```
 
 ---
@@ -30,8 +29,8 @@
 ## 快速开始
 
 ```bash
-chmod +x dockerize.sh
-./dockerize.sh
+chmod +x dev
+dev
 ```
 
 脚本会自动完成以下流程：
@@ -108,6 +107,10 @@ sudo systemctl restart docker
 
 ```
 
+## 加入环境变量
+在 ~/.bashrc 或者 ~/.zshrc里面添加下面命令
+```
+export PATH="$PATH:/home/peter/work/dev
 ---
 
 ## 作者
