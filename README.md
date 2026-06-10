@@ -1,13 +1,13 @@
 # dev
 
-一个轻量级的 Docker 开发容器管理脚本，支持自动构建、增量重建（Dockerfile 变更检测）和用户映射，专为本地开发工作流设计。
+一个轻量级的 Docker 开发容器管理脚本，支持自动构建、手动重建和用户映射，专为本地开发工作流设计。
 
 ---
 
 ## 功能特性
 
 - **自动命名**：以当前目录名作为容器名称（自动转小写）
-- **变更检测**：通过 MD5 校验 Dockerfile，仅在变更时重建容器，避免无谓重建
+- **手动重建**：默认复用已有容器，仅在传入 `--rebuild` 或 `-r` 时重建容器
 - **用户映射**：将宿主机用户（UID/GID）映射进容器，避免文件权限问题
 - **配置同步**：自动同步 `.gitconfig`、`.git-credentials`、bash 配置及 Go 工具链配置
 - **快速进入**：容器已运行时直接 `exec` 进入，无需重启
@@ -33,13 +33,21 @@ chmod +x dev
 dev
 ```
 
+如需强制删除已有容器并重新构建：
+
+```bash
+dev --rebuild
+# 或
+dev -r
+```
+
 脚本会自动完成以下流程：
 
 ```
 检查 Dockerfile 是否存在
       ↓
 容器是否已存在？
-  ├─ 是 → Dockerfile 有变更？
+  ├─ 是 → 是否传入 --rebuild / -r？
   │         ├─ 是 → 删除旧容器，重新构建并启动
   │         └─ 否 → 容器未运行则启动 → 直接进入
   └─ 否 → 构建镜像 → 启动容器 → 初始化配置 → 进入容器
@@ -85,13 +93,13 @@ dev
 ## 注意事项
 
 - Dockerfile 路径固定为 `artifacts/docker/dev.dockerfile`，请确保该文件存在
-- MD5 状态文件存储于 `/tmp/.<container_name>_dockerfile_md5`，重启系统后会触发一次重建
+- 修改 `dev.dockerfile` 后不会自动重建；需要执行 `dev --rebuild` 或 `dev -r` 让变更生效
 - 以 root 身份运行宿主机时，容器内同样以 root 运行，跳过用户映射
 - `--gpus all` 需要宿主机安装 NVIDIA Container Toolkit，无 GPU 环境请自行移除该参数
 
 ## 可能出现的问题
 
-实际过程当中可能会出现CDI 配置问题，安装/重装 NVIDIA Container Toolkit
+实际过程当中可能会出现CDI 配置问题，安装/重装 NVIDIA Container Toolkit。显示界面在主机执行 `xhost +local:`。有可能出现显示问题，检查是否挂载了主机网络，默认需要挂载主机网络
 ```
 # Ubuntu/Debian
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
@@ -112,6 +120,8 @@ sudo systemctl restart docker
 ```
 export PATH="$PATH:/home/peter/work/dev
 ---
+
+
 
 ## 作者
 

@@ -5,32 +5,26 @@
 # Get current directory name as container name (convert to lowercase)
 container_name=$(basename "$PWD" | tr '[:upper:]' '[:lower:]')
 dockerfile_path="$PWD/artifacts/docker/dev.dockerfile"
-md5_file="/tmp/.${container_name}_dockerfile_md5"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+force_rebuild=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --rebuild|-r)
+            force_rebuild=1
+            shift
+            ;;
+        *)
+            echo "Usage: $0 [--rebuild|-r]"
+            exit 1
+            ;;
+    esac
+done
 
 host_user="${USER:-$(whoami)}"
 host_uid="$(id -u)"
 host_gid="$(id -g)"
 container_home="/home/${host_user}"
-
-# Function to check if dockerfile has changed
-check_dockerfile_changed() {
-    # If MD5 file doesn't exist, create it
-    if [ ! -f "$md5_file" ]; then
-        md5sum "$dockerfile_path" > "$md5_file"
-        return 0
-    fi
-    
-    # Compare current MD5 with stored MD5
-    local stored_md5=$(cat "$md5_file")
-    local current_md5=$(md5sum "$dockerfile_path")
-    
-    if [ "$stored_md5" != "$current_md5" ]; then
-        md5sum "$dockerfile_path" > "$md5_file"
-        return 0
-    fi
-    return 1
-}
 
 ensure_container_user() {
     if [ "$host_uid" -eq 0 ]; then
@@ -116,9 +110,9 @@ fi
 # Check if container needs to be recreated
 needs_rebuild=0
 if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
-    if check_dockerfile_changed; then
-        echo "Detected Dockerfile changes, will recreate container"
-        docker rm -f $container_name
+    if [ "$force_rebuild" -eq 1 ]; then
+        echo "Rebuild requested, will recreate container"
+        docker rm -f "$container_name"
         needs_rebuild=1
     else
         # Check if container is running
