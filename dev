@@ -143,9 +143,11 @@ if [ $needs_rebuild -eq 1 ] || ! docker ps -a --format '{{.Names}}' | grep -q "^
         --add-host $(hostname):127.0.0.1 \
         --shm-size 2G \
         --gpus all \
+        --network host \
         -e NVIDIA_VISIBLE_DEVICES=all \
         -e NVIDIA_DRIVER_CAPABILITIES=all \
         -e DISPLAY \
+        -e QT_X11_NO_MITSHM=1 \
         -v /etc/localtime:/etc/localtime:ro \
         -v /lib/modules:/lib/modules \
         -v /dev/bus/usb:/dev/bus/usb \
