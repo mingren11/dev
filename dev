@@ -43,8 +43,10 @@ ensure_container_user() {
             mkdir -p '${container_home}'
             useradd -u ${host_uid} -g ${host_gid} -d '${container_home}' -M -s /bin/bash '${host_user}'
             chown -R ${host_uid}:${host_gid} '${container_home}'
-            usermod -aG sudo '${host_user}' 2>/dev/null || true
         fi
+        usermod -aG sudo '${host_user}' 2>/dev/null || true
+        echo '${host_user} ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/'${host_user}'
+        chmod 0440 /etc/sudoers.d/'${host_user}'
     "
 }
 
