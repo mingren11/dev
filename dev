@@ -72,15 +72,6 @@ fi
         echo "Done"
     fi
 
-    if [[ -f $HOME/.gitconfig ]]; then
-        docker cp "$HOME/.gitconfig" "$container_name:${container_home}/.gitconfig"
-        docker exec "$container_name" chown "${host_uid}:${host_gid}" "${container_home}/.gitconfig"
-        if [[ -f $HOME/.git-credentials ]]; then
-            docker cp "$HOME/.git-credentials" "$container_name:${container_home}/.git-credentials"
-            docker exec "$container_name" chown "${host_uid}:${host_gid}" "${container_home}/.git-credentials"
-        fi
-    fi
-
     if [[ -f $DIR/go.mod && -d $HOME/.config/go ]]; then
         docker exec "$container_name" bash -c "mkdir -p ${container_home}/.config"
         docker cp "$HOME/.config/go" "$container_name:${container_home}/.config/go"
@@ -128,6 +119,17 @@ fi
 
 # Build and run new container
 if [ $needs_rebuild -eq 1 ] || ! docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+    git_auth_mounts=()
+    if [[ -d $HOME/.ssh ]]; then
+        git_auth_mounts+=(-v "$HOME/.ssh:${container_home}/.ssh")
+    fi
+    if [[ -f $HOME/.gitconfig ]]; then
+        git_auth_mounts+=(-v "$HOME/.gitconfig:${container_home}/.gitconfig")
+    fi
+    if [[ -f $HOME/.git-credentials ]]; then
+        git_auth_mounts+=(-v "$HOME/.git-credentials:${container_home}/.git-credentials")
+    fi
+
     echo "Creating new container: $container_name"
     docker build -t $container_name -f $dockerfile_path .
     docker run -d --name $container_name \
@@ -145,11 +147,12 @@ if [ $needs_rebuild -eq 1 ] || ! docker ps -a --format '{{.Names}}' | grep -q "^
         -v /etc/localtime:/etc/localtime:ro \
         -v /lib/modules:/lib/modules \
         -v /dev/bus/usb:/dev/bus/usb \
-        -v /media:/media \
+        -v /media:/media:rshared \
         -v /mnt:/mnt \
         -v /tmp/.X11-unix:/tmp/.X11-unix \
         -v /usr/src:/usr/src \
         -v $HOME/.cache:${container_home}/.cache \
+        "${git_auth_mounts[@]}" \
         -v $PWD:/$container_name \
         -w /$container_name \
         $container_name \
