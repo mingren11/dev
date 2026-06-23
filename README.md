@@ -19,10 +19,9 @@ A lightweight Docker development container manager with automatic builds, option
 
 ```
 <your-project>/
-├── artifacts/
-│   └── docker/
-│       └── dev.dockerfile      # required
-└── dev                           # this script
+└── artifacts/
+    └── docker/
+        └── dev.dockerfile      # required
 ```
 
 ---
@@ -31,13 +30,13 @@ A lightweight Docker development container manager with automatic builds, option
 
 ```bash
 chmod +x dev
-dev
-```
 
-Add to system PATH:
-```
+# Add to system PATH:
 echo "export PATH="$PATH:<your-dev-path>"" > ~/.bashrc
-echo "export PATH="$PATH:<your-dev-path>"" > ~/.zshrc
+source ~/.bashrc
+
+cd <your-project>
+dev
 
 ```
 
