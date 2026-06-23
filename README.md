@@ -34,6 +34,13 @@ chmod +x dev
 dev
 ```
 
+Add to system PATH:
+```
+echo "export PATH="$PATH:<your-dev-path>"" > ~/.bashrc
+echo "export PATH="$PATH:<your-dev-path>"" > ~/.zshrc
+
+```
+
 To remove an existing container and rebuild from scratch:
 
 ```bash
